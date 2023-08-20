@@ -55,4 +55,4 @@ Thumbs.db
 
 # Project-specific files or directories
 my_project_specific_file.txt
-secret_config.json
+output
