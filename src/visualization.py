@@ -3,7 +3,7 @@ from matplotlib.patches import Patch
 from matplotlib_venn import venn2, venn3
 
 
-def create_plot_data(set_values):
+def _create_plot_data(set_values):
 
     # grab input sets
     A = set_values['A']
@@ -78,7 +78,7 @@ def create_plot_data(set_values):
                 set_A_and_B_and_D), 
     } 
 
-def visualize_set_similarities(plot_title, set_names, set_values, set_legends, 
+def _visualize_set_similarities(plot_title, set_names, set_values, set_legends, 
                                output_file=None):
 
     # Create the figure and subplots
@@ -91,7 +91,7 @@ def visualize_set_similarities(plot_title, set_names, set_values, set_legends,
     plt.subplots_adjust(top=0.9)
 
     # Evaluate the values for the venn2 and venn3 plots and return them in a dictionary
-    dic_values = create_plot_data(set_values)  
+    dic_values = _create_plot_data(set_values)  
 
     # Create Venn diagrams and add to subplots
 
@@ -235,5 +235,5 @@ def create_SBOM_similarity_plot(project_name, target_fields, scanner_data,
         'E': 'E: Trivy'
     }
 
-    visualize_set_similarities(plot_title, set_names, set_values, set_legends, 
+    _visualize_set_similarities(plot_title, set_names, set_values, set_legends, 
                                output_file)

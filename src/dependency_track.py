@@ -26,11 +26,11 @@ class DependencyTrack:
         # Set API key
         self.API_KEY = os.getenv('DEPENDENCY_TRACK_API_KEY')
 
-        # Set the headers with the API key
-        self.headers =  {                     
-            "accept": "application/json",
-            "X-Api-Key": self.API_KEY
-        }      
+        # Add list with all scanner names
+        self.scanner_names = ['gitlab_cont', 
+                              'jfrog_advanced_security_cont', 
+                              'jfrog_cont', 
+                              'syft_cont', 'trivy_cont']
 
         self._get_all_projects()
         if self.project_info is None:
@@ -63,14 +63,18 @@ class DependencyTrack:
             indicates a successful response from the Dependency Track API. By default, 
             it is set to 200.
         """  
- 
+        # Set the headers with the API key
+        headers =  {                     
+            "accept": "application/json",
+            "X-Api-Key": self.API_KEY
+        }      
+
         # Make the request to get all projects
         url = f"{self.DEPENDENCY_TRACK_API_URL}/project"
-        print(f"url is: {url}")
         response = self._make_request(method='GET', 
                                       url=url, 
                                       verify=False, 
-                                      headers=self.headers)
+                                      headers=headers)
 
         # Check the response status
         if response is not None and response.status_code == SUCCESS_STATUS_CODE:
@@ -102,24 +106,24 @@ class DependencyTrack:
                                               headers=headers)
 
                 # Check the response status
-                if response.status_code == SUCCESS_STATUS_CODE:
+                if (response is not None and response.status_code is not None 
+                    and response.status_code == SUCCESS_STATUS_CODE):
                     project_info = response.json()
+
                     if "version" in project_info :
                         data['Version'].append(project_info['version'])
                     else:
                         data['Version'].append(pd.NA)      
                 else:
                     data['Version'].append(pd.NA)
-                    logging.error("Failed to get project version.")
-
-            # Create the dataframe
+                    logging.error("Failed to get project version.")            # Create the dataframe
             self.project_info = pd.DataFrame(data)
             return pd.DataFrame(data)
         else:
             logging.error("Failed to get projects.")
             return None
     
-    def _get_project_data(self, project_name, scanner_names):
+    def _get_project_data(self, project_name):
         # Code to retrieve project data using project_name and scanner_names
         # Use self.project_info to access the project names and UUIDs
         """
@@ -141,37 +145,46 @@ class DependencyTrack:
         Example:
             combined_df = get_project_data('project_name', ['scanner1', 'scanner2'])
         """
-#        if self.project_info is None:
-#            print(f"project_info is None. Unable to proceed. 
-#                  Please execute function '' first ")
-#        return
 
         # Add list with UUID to every scanner project for the current project_name
-        project_list = [f"{project_name}_{scanner_name}" for scanner_name in scanner_names]  # noqa: E501
-        matching_rows = self.project_info[self.project_info['Name'].isin(project_list)]
-        uuids = matching_rows['UUID'].tolist()
+        project_list = [f"{project_name}_{scanner_name}" for scanner_name in self.scanner_names]  # noqa: E501
 
-        try:
-            # Create a list of the data frames
-            data_frames = [self._get_project_components(uuid)  
-                           for uuid in uuids]
-        except Exception as e:
-            # Handle the exception here
-            logging.error("An error occurred:%s", e)
+        if self.project_info is not None:
+            project_info_df = self.project_info
+
+            matching_rows = project_info_df[project_info_df['Name'].isin(project_list)]
+            uuids = matching_rows['UUID'].tolist()
+
+            try:
+                # Create a list of the data frames of every scanner
+                data_frames = [self._get_project_components(uuid)  
+                               for uuid in uuids]
+            except Exception as e:
+                # Handle the exception here
+                logging.error(f"An error occurred: {e}")
+                return
+
+            # Add scanner name and UUID columns to each data frame
+            for i, df in enumerate(data_frames):
+                if df is not None:
+                    df['scanner_name'] = self.scanner_names[i]
+                    df['UUID'] = uuids[i]
+                else:
+                    message = (
+                        f"No component information available for project {project_name} "
+                        f"with project uuid {uuids[i]}")
+                    print(message)
     
-        # Add scanner name and UUID columns to each data frame
-        for i, df in enumerate(data_frames):
-            if df is not None:
-                df['scanner_name'] = scanner_names[i]
-                df['UUID'] = uuids[i]
-            else:
-                message = (
-                    f"No component information available for project {project_name} "
-                    f"with project uuid {uuids[i]}")
-                print(message)
-    
-        # Concatenate the data frames into one
-        return pd.concat(data_frames, ignore_index=True)
+            # Filter out None values from the list
+            filtered_data_frames = [df for df in data_frames if df is not None]
+
+            # Concatenate the data frames into one
+            if filtered_data_frames is not None:
+                return pd.concat(filtered_data_frames, ignore_index=True)
+        else:
+            print("Project info is not available.")
+            logging.error("Project info is not available.")
+            return None
    
     def _get_project_components(self, project_uuid):
         # Code to retrieve SBOM for a project with the given UUID
@@ -200,15 +213,23 @@ class DependencyTrack:
         DataFrame with component information or None
         """
 
+        # Set the headers with the API key
+        headers = {
+                    "accept": "application/vnd.cyclonedx+xml",
+                    "X-Api-Key": self.API_KEY
+                    }
+        
         # Make the API request to retrieve the SBOM data
         url = f"{self.DEPENDENCY_TRACK_API_URL}/bom/cyclonedx/project/{project_uuid}"  
         response = self._make_request(method='GET', 
                                       url=url, 
                                       verify=False, 
-                                      headers=self.headers)
-       
-        # Check if the request was successful (HTTP status code 200)
-        if response.status_code == SUCCESS_STATUS_CODE:
+                                      headers=headers)
+
+        # Check the response status
+        if (response is not None and response.status_code is not None 
+            and response.status_code == SUCCESS_STATUS_CODE):
+     
             sbom_data = response.json()
             try:
                 # Process the SBOM data as 
@@ -220,56 +241,67 @@ class DependencyTrack:
             print("Error: Failed to retrieve SBOM data.")
             return None
 
-    def _collect_all_scanner_data(self, project_name):
+    def collect_all_scanner_data(self, project_name):
         # Code to collect all scanner data for a project
         # Use self.get_project_data and self.get_project_components
-    
-        # Add list with all scanner names
-        scanner_names = ['gitlab_cont', 
-                         'jfrog_advanced_security_cont', 
-                         'jfrog_cont', 
-                         'syft_cont', 
-                         'trivy_cont']
 
         try:
             # get data of all scanners in 'scanner_names' for project 'project_name'
-            self._get_project_data(project_name, scanner_names)
+            project_data_df = self._get_project_data(project_name)
         except Exception as e:
             # Handle the exception here
-            logging(f"An error occurred: {e}")
+            project_data_df = None
+            logging.error(f"An error occurred loading the scanner data: {e}")
 
         # Create list with scanner index.    
-        scanner_masks = [self.project_info['scanner_name'] == scanner_name 
-                         for scanner_name in scanner_names]
+        if (project_data_df is not None and isinstance(project_data_df, pd.DataFrame)
+            and self.project_info is not None):
+            scanner_masks = [project_data_df['scanner_name'] == scanner_name 
+                             for scanner_name in self.scanner_names]
 
-        # Create a data frame 'data_df' with all scanner data for one project 
-        data_df = {
-            name: self.project_info.loc[mask, ['scanner_name', 'name', 'version', 
-                                             'purl', 'bom-ref', 'hashes']] 
-                                             for name, mask in zip(scanner_names, 
-                                                                   scanner_masks)}
+            # Create a data frame 'data_df' with all scanner data for one project 
+            data_df = {
+                name: project_data_df.loc[mask, ['scanner_name', 'name', 'version', 
+                                                   'purl', 'bom-ref', 'hashes']] 
+                                                   for name, mask in 
+                                                   zip(self.scanner_names, 
+                                                       scanner_masks)}
 
-        # Select data from scanners and add dot df_list (df_list[0] are all data of 
-        # interest from scanner scanner_names[0]
-        scanner_data = {}
-        for scanner_name in scanner_names:
-            # Select data and reset index
-            df = data_df[scanner_name]
-            df.reset_index(drop=True, inplace=True)
+            # Select data from scanners and add dot df_list (df_list[0] are all data of 
+            # interest from scanner scanner_names[0]
+            scanner_data = {}
+            for scanner_name in self.scanner_names:
+                # Select data and reset index
+                df = data_df[scanner_name]
+                df.reset_index(drop=True, inplace=True)
 
-            # Apply the parse_url function to each element of the 'purl' column
-            df_parsed = df['purl'].apply(self._parse_purl)
+                # Apply the parse_url function to each element of the 'purl' column
+                df_parsed = df['purl'].apply(self._parse_purl)
 
-            # Convert the parsed_data Series of dictionaries into a DataFrame
-            df_parsed_df = pd.DataFrame(df_parsed.to_list())
+                # Convert the parsed_data Series of dictionaries into a DataFrame
+                df_parsed_df = pd.DataFrame(df_parsed.to_list())
 
-            # Concatenate the parsed_df DataFrame with the original df DataFrame
-            df = pd.concat([df, df_parsed_df], axis=1)
+                # Concatenate the parsed_df DataFrame with the original df DataFrame
+                df = pd.concat([df, df_parsed_df], axis=1)
 
-            # Add data frame for scanner_name to dictionary
-            scanner_data[scanner_name] = df
+                # Add data frame for scanner_name to dictionary
+                scanner_data[scanner_name] = df
 
-        return scanner_data
+            return scanner_data
+        else:
+            if project_data_df is None:
+                # project_data_df could not be pulled
+                print("Data frame project_data_df is not available")
+                logging.error("Data frame project_data_df is not available")
+                
+            elif isinstance(project_data_df, pd.DataFrame):
+                # project_info not initialized
+                print("Variable project_data_df is not a data frame")
+                logging.error("Variable project_data_df is not a data frame")
+            else: 
+                # project_info not initialized
+                print("Data frame project_info is not initialized")
+                logging.error("Data frame project_info is not initialized")
     
     def _parse_purl(self, purl_string):
         # Code to parse the purl and extract information
