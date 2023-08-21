@@ -1,7 +1,6 @@
 import logging
 import os
 import warnings
-from pprint import pprint
 
 import pandas as pd
 import requests
@@ -32,11 +31,10 @@ class DependencyTrack:
             "accept": "application/json",
             "X-Api-Key": self.API_KEY
         }      
-        pprint(self.headers)
 
-#        self._get_all_projects()
-#        if self.project_info is None:
-#            print("Initialization failed: Project information not available")   
+        self._get_all_projects()
+        if self.project_info is None:
+            print("Initialization failed: Project information not available")   
     
     def _get_all_projects(self):
         # sourcery skip: extract-method, remove-unnecessary-else
@@ -86,37 +84,36 @@ class DependencyTrack:
                 project_name = project["name"]
                 project_uuid = project["uuid"]
 
-            data["Name"].append(project_name)
-            data["UUID"].append(project_uuid)
-            pprint(data)
+                data["Name"].append(project_name)
+                data["UUID"].append(project_uuid)
 
-            # Set the headers with the API key
-            headers = {
-                "accept": "application/vnd.cyclonedx+xml",
-                "X-Api-Key": self.API_KEY
-                }
+                # Set the headers with the API key
+                headers = {
+                    "accept": "application/vnd.cyclonedx+xml",
+                    "X-Api-Key": self.API_KEY
+                    }
             
-            # Make the request to get versions for a project
-            url = (self.DEPENDENCY_TRACK_API_URL + 
-                   f"/bom/cyclonedx/project/{project_uuid}")
-            response = self._make_request(method='GET', 
-                                          url=url, 
-                                          verify=False, 
-                                          headers=headers)
+                # Make the request to get versions for a project
+                url = (self.DEPENDENCY_TRACK_API_URL + 
+                       f"/bom/cyclonedx/project/{project_uuid}")
+                response = self._make_request(method='GET', 
+                                              url=url, 
+                                              verify=False, 
+                                              headers=headers)
 
-            # Check the response status
-            if response.status_code == SUCCESS_STATUS_CODE:
-                project_info = response.json()
-                if "version" in project_info :
-                    data['Version'].append(project_info['version'])
+                # Check the response status
+                if response.status_code == SUCCESS_STATUS_CODE:
+                    project_info = response.json()
+                    if "version" in project_info :
+                        data['Version'].append(project_info['version'])
+                    else:
+                        data['Version'].append(pd.NA)      
                 else:
-                    data['Version'].append(pd.NA)      
-            else:
-                data['Version'].append(pd.NA)
-                logging.error("Failed to get project version.")
+                    data['Version'].append(pd.NA)
+                    logging.error("Failed to get project version.")
 
             # Create the dataframe
-            project_info = pd.DataFrame(data)
+            self.project_info = pd.DataFrame(data)
             return pd.DataFrame(data)
         else:
             logging.error("Failed to get projects.")
@@ -296,7 +293,6 @@ class DependencyTrack:
 
     def _make_request(self, method, url, verify=True, **kwargs):
         try:
-            pprint(kwargs)
             session = requests.Session()
             response = session.request(method=method, url=url, verify=verify, **kwargs)
             response.raise_for_status()  # Raises an HTTPError for non-2xx responses
