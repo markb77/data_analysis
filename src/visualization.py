@@ -1,6 +1,9 @@
+import os
+
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 from matplotlib_venn import venn2, venn3
+from sklearn import metrics
 
 
 def _create_plot_data(set_values):
@@ -78,8 +81,8 @@ def _create_plot_data(set_values):
                 set_A_and_B_and_D), 
     } 
 
-def _visualize_set_similarities(plot_title, set_names, set_values, set_legends, 
-                               output_file=None):
+def _visualize_set_similarities(plot_title, project_name, set_names, 
+                                set_values, set_legends, output_file=None):
 
     # Create the figure and subplots
     fig, axs = plt.subplots(3, 2, figsize=(10, 12))
@@ -184,8 +187,15 @@ def _visualize_set_similarities(plot_title, set_names, set_values, set_legends,
     plt.tight_layout()
 
     if output_file:
+        # Check if output folder exists
+        output_folder = f"../output/{project_name}"
+        if not os.path.exists(output_folder):
+            os.makedirs(output_folder)
+    
         # Save the plot to a file
-        plt.savefig(f"../output/{output_file}", dpi=300, bbox_inches='tight')
+        plt.savefig(os.path.join(output_folder, 
+                                 output_file), dpi=300, bbox_inches='tight')
+      
 
     # Show the plots
     plt.show()
@@ -235,5 +245,66 @@ def create_SBOM_similarity_plot(project_name, target_fields, scanner_data,
         'E': 'E: Trivy'
     }
 
-    _visualize_set_similarities(plot_title, set_names, set_values, set_legends, 
+    _visualize_set_similarities(plot_title, project_name, set_names, set_values, set_legends, 
                                output_file)
+    
+def create_SBOM_confusion_matrix(project_name, scanner_names, scanner_data_df, output_file=None):
+
+    plot_title = f"Confusion matrix for project {project_name}"
+
+    # Create the figure and subplots
+    fig, axes = plt.subplots(3, 2, figsize=(10, 12))
+
+    # Set a title for the entire subplot grid
+    fig.suptitle(plot_title, fontsize=12)
+
+    # Adjust the spacing between the title and subplots
+    plt.subplots_adjust(top=0.9)
+
+    fig_index = [(0, 0), (1, 0), (1, 1), (2,0), (2,1)]
+
+    # Iterate over the scanners and populate each subplot
+    for i, scanner in enumerate(scanner_names):
+        # Get the actual and predicted values for the current scanner
+        actual = scanner_data_df['labeling'].replace({'TP': 1, 'FP': 0}).to_numpy()
+        predicted = (
+            scanner_data_df[f"pred_{scanner}"]
+            .replace({'P': 1, 'N': 0})
+            .to_numpy())
+
+        # Compute the confusion matrix
+        confusion_matrix = metrics.confusion_matrix(actual, predicted)
+
+        # Create a ConfusionMatrixDisplay object
+        cm_display = metrics.ConfusionMatrixDisplay(confusion_matrix=confusion_matrix, 
+                                                    display_labels=[False, True])
+
+        # Plot the confusion matrix on the current subplot
+        cm_display.plot(ax=axes[fig_index[i]]) # type: ignore
+        axes[fig_index[i]].set_title(scanner)
+
+        # Remove the grid from each subplot
+        axes[fig_index[i]].grid(False)
+
+    # Hide the subplot at position (0, 1)
+    axes[0, 1].remove()
+
+    # Adjust spacing between subplots
+    plt.subplots_adjust(wspace=0.4, hspace=0.4)
+    
+    # Adjust the spacing between subplots
+    plt.tight_layout()
+
+    if output_file:
+        # Check if output folder exists
+        output_folder = f"../output/{project_name}"
+        if not os.path.exists(output_folder):
+            os.makedirs(output_folder)
+    
+        # Save the plot to a file
+        plt.savefig(os.path.join(output_folder, 
+                                 output_file), dpi=300, bbox_inches='tight')
+
+
+    # Show the plot
+    plt.show()
