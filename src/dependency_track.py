@@ -85,38 +85,10 @@ class DependencyTrack:
                 "UUID": []
             }
             for project in projects:
-                project_name = project["name"]
-                project_uuid = project["uuid"]
+                data["Name"].append(project["name"])
+                data["Version"].append(project["version"])
+                data["UUID"].append(project["uuid"])
 
-                data["Name"].append(project_name)
-                data["UUID"].append(project_uuid)
-
-                # Set the headers with the API key
-                headers = {
-                    "accept": "application/vnd.cyclonedx+xml",
-                    "X-Api-Key": self.API_KEY
-                    }
-            
-                # Make the request to get versions for a project
-                url = (self.DEPENDENCY_TRACK_API_URL + 
-                       f"/bom/cyclonedx/project/{project_uuid}")
-                response = self._make_request(method='GET', 
-                                              url=url, 
-                                              verify=False, 
-                                              headers=headers)
-
-                # Check the response status
-                if (response is not None and response.status_code is not None 
-                    and response.status_code == SUCCESS_STATUS_CODE):
-                    project_info = response.json()
-
-                    if "version" in project_info :
-                        data['Version'].append(project_info['version'])
-                    else:
-                        data['Version'].append(pd.NA)      
-                else:
-                    data['Version'].append(pd.NA)
-                    logging.error("Failed to get project version.")            # Create the dataframe
             self.project_info = pd.DataFrame(data)
             return pd.DataFrame(data)
         else:
@@ -154,6 +126,8 @@ class DependencyTrack:
 
             matching_rows = project_info_df[project_info_df['Name'].isin(project_list)]
             uuids = matching_rows['UUID'].tolist()
+
+            if 
 
             try:
                 # Create a list of the data frames of every scanner
