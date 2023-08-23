@@ -86,8 +86,10 @@ class DependencyTrack:
             }
             for project in projects:
                 data["Name"].append(project["name"])
-                data["Version"].append(project["version"])
-                data["UUID"].append(project["uuid"])
+                # Check if the "version" key exists in the current project dictionary
+                version = project.get("version", "N/A")  # Use "N/A" as the default value
+                data["Version"].append(version)
+                data["UUID"].append(project["uuid"])                                                                                                
 
             self.project_info = pd.DataFrame(data)
             return pd.DataFrame(data)
@@ -95,7 +97,7 @@ class DependencyTrack:
             logging.error("Failed to get projects.")
             return None
     
-    def _get_project_data(self, project_name):
+    def _get_project_data(self, project_name, project_version:None):
         # Code to retrieve project data using project_name and scanner_names
         # Use self.project_info to access the project names and UUIDs
         """
@@ -124,10 +126,19 @@ class DependencyTrack:
         if self.project_info is not None:
             project_info_df = self.project_info
 
-            matching_rows = project_info_df[project_info_df['Name'].isin(project_list)]
-            uuids = matching_rows['UUID'].tolist()
-
-            if 
+            if project_version is None:
+                mask = project_info_df['Name'].isin(project_list) 
+            else:
+                mask = ((project_info_df['Name'].isin(project_list)) & 
+                        (project_info_df['Version'] == str(project_version)))
+            
+            matching_rows = project_info_df[mask]
+            nr, _ = matching_rows.shape
+            if nr > 0:
+                uuids = matching_rows['UUID'].tolist()
+            else:
+                print(f"Error: no project with {project_name} and version {project_version} known")
+                return
 
             try:
                 # Create a list of the data frames of every scanner
@@ -208,6 +219,9 @@ class DependencyTrack:
             try:
                 # Process the SBOM data as 
                 df = pd.DataFrame(sbom_data['components'])
+                # data cleaning
+                # remove all rows with undefined version (NaN)
+                df = df.dropna(subset=['version'])
             except KeyError:
                 df = None
             return df
@@ -215,13 +229,13 @@ class DependencyTrack:
             print("Error: Failed to retrieve SBOM data.")
             return None
 
-    def collect_all_scanner_data(self, project_name):
+    def collect_all_scanner_data(self, project_name, project_version:None):
         # Code to collect all scanner data for a project
         # Use self.get_project_data and self.get_project_components
 
         try:
             # get data of all scanners in 'scanner_names' for project 'project_name'
-            project_data_df = self._get_project_data(project_name)
+            project_data_df = self._get_project_data(project_name, project_version)
         except Exception as e:
             # Handle the exception here
             project_data_df = None
