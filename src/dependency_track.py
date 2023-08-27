@@ -87,7 +87,7 @@ class DependencyTrack:
             for project in projects:
                 data["Name"].append(project["name"])
                 # Check if the "version" key exists in the current project dictionary
-                version = project.get("version", "N/A")  # Use "N/A" as the default value
+                version = project.get("version", "None")  # Use "None" as the default value
                 data["Version"].append(version)
                 data["UUID"].append(project["uuid"])                                                                                                
 
@@ -219,9 +219,6 @@ class DependencyTrack:
             try:
                 # Process the SBOM data as 
                 df = pd.DataFrame(sbom_data['components'])
-                # data cleaning
-                # remove all rows with undefined version (NaN)
-                df = df.dropna(subset=['version'])
             except KeyError:
                 df = None
             return df

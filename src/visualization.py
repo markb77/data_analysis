@@ -1,3 +1,4 @@
+import copy
 import os
 
 import matplotlib.pyplot as plt
@@ -81,7 +82,7 @@ def _create_plot_data(set_values):
                 set_A_and_B_and_D), 
     } 
 
-def _visualize_set_similarities(plot_title, project_name, set_names, 
+def _visualize_set_similarities(plot_title, project_name, project_version, set_names, 
                                 set_values, set_legends, output_file=None):
 
     # Create the figure and subplots
@@ -188,28 +189,35 @@ def _visualize_set_similarities(plot_title, project_name, set_names,
 
     if output_file:
         # Check if output folder exists
-        output_folder = f"../output/{project_name}"
+        if project_version:
+            output_folder = f"../output/{project_name}_{project_version}"
+        else:
+            output_folder = f"../output/{project_name}"
         if not os.path.exists(output_folder):
             os.makedirs(output_folder)
     
         # Save the plot to a file
-        plt.savefig(os.path.join(output_folder, 
-                                 output_file), dpi=300, bbox_inches='tight')
-      
+        plt.savefig(os.path.join(output_folder, output_file), 
+                    dpi=300, bbox_inches='tight')      
 
     # Show the plots
     plt.show()
 
-def create_SBOM_similarity_plot(project_name, target_fields, scanner_data, 
+def create_SBOM_similarity_plot(project_name, project_version:None, scanner_data_df, 
                                 output_file=None):
+    # sourcery skip: identity-comprehension
     # create plot title
-    plot_title = (
-        f"SBOM similarity plot for project {project_name} "
-        f"with target field(s): {target_fields}"
-    )
-    
-    # currently only one target field is implemented
-    target_field = target_fields
+    plot_title = f"SBOM similarity plot for project {project_name} version {project_version}"  # noqa: E501
+
+    # data cleaning
+    # Copy scannar_data before doing data cleaning
+    df = copy.deepcopy(scanner_data_df)
+
+    # Remove rows with NaN in the "version" field
+    df = df.dropna(subset=['version'])
+
+    # Create dictionry
+    modified_dict = {key: group for key, group in df.groupby('scanner_name')}
 
     # define abbreviations for scanners
     scanner_labels = {
@@ -230,11 +238,11 @@ def create_SBOM_similarity_plot(project_name, target_fields, scanner_data,
     }
 
     set_values = {
-        'A': set(scanner_data['gitlab_cont'][target_field]),
-        'B': set(scanner_data['jfrog_advanced_security_cont'][target_field]),
-        'C': set(scanner_data['jfrog_cont'][target_field]),
-        'D': set(scanner_data['syft_cont'][target_field]),
-        'E': set(scanner_data['trivy_cont'][target_field])
+        'A': set(modified_dict['gitlab_cont']['name_version']),
+        'B': set(modified_dict['jfrog_advanced_security_cont']['name_version']),
+        'C': set(modified_dict['jfrog_cont']['name_version']),
+        'D': set(modified_dict['syft_cont']['name_version']),
+        'E': set(modified_dict['trivy_cont']['name_version'])
     }
 
     set_legends = {
@@ -245,10 +253,14 @@ def create_SBOM_similarity_plot(project_name, target_fields, scanner_data,
         'E': 'E: Trivy'
     }
 
-    _visualize_set_similarities(plot_title, project_name, set_names, set_values, set_legends, 
-                               output_file)
+    _visualize_set_similarities(plot_title, project_name, project_version, set_names, 
+                                set_values, set_legends, output_file)
     
-def create_SBOM_confusion_matrix(project_name, scanner_names, scanner_data_df, output_file=None):
+def create_SBOM_confusion_matrix(project_name, project_version:None, scanner_data_df, 
+                                 output_file=None):
+ 
+
+    scanner_names = scanner_data_df['scanner_name'].unique()
 
     plot_title = f"Confusion matrix for project {project_name}"
 
@@ -265,19 +277,19 @@ def create_SBOM_confusion_matrix(project_name, scanner_names, scanner_data_df, o
 
     # Iterate over the scanners and populate each subplot
     for i, scanner in enumerate(scanner_names):
+
         # Get the actual and predicted values for the current scanner
-        actual = scanner_data_df['labeling'].replace({'TP': 1, 'FP': 0}).to_numpy()
-        predicted = (
-            scanner_data_df[f"pred_{scanner}"]
-            .replace({'P': 1, 'N': 0})
-            .to_numpy())
+        ind_mask = scanner_data_df['scanner_name'] == scanner
+        actual = scanner_data_df[ind_mask]['label'].astype(int)
+        predicted = scanner_data_df[ind_mask]['flag'].astype(int)
 
         # Compute the confusion matrix
         confusion_matrix = metrics.confusion_matrix(actual, predicted)
 
         # Create a ConfusionMatrixDisplay object
-        cm_display = metrics.ConfusionMatrixDisplay(confusion_matrix=confusion_matrix, 
-                                                    display_labels=[False, True])
+        cm_display = metrics.ConfusionMatrixDisplay(
+            confusion_matrix=confusion_matrix, 
+            display_labels=[False, True])
 
         # Plot the confusion matrix on the current subplot
         cm_display.plot(ax=axes[fig_index[i]]) # type: ignore
@@ -297,14 +309,70 @@ def create_SBOM_confusion_matrix(project_name, scanner_names, scanner_data_df, o
 
     if output_file:
         # Check if output folder exists
-        output_folder = f"../output/{project_name}"
+        if project_version:
+            output_folder = f"../output/{project_name}_{project_version}"
+        else:
+            output_folder = f"../output/{project_name}"
         if not os.path.exists(output_folder):
             os.makedirs(output_folder)
     
         # Save the plot to a file
-        plt.savefig(os.path.join(output_folder, 
-                                 output_file), dpi=300, bbox_inches='tight')
-
+        plt.savefig(os.path.join(output_folder, output_file), 
+                    dpi=300, bbox_inches='tight')
 
     # Show the plot
     plt.show()
+
+    
+
+def evaluate_confusion_matrix(scanner_data_agg_df):
+    columns = ['project_name', 'project_version', 'scanner_name', 'name_version', 'name', 'version']
+    project_version_grouped = scanner_data_agg_df[columns].groupby(['project_name', 'project_version'], dropna=False)
+
+    for key, project_version_group in project_version_grouped:
+
+        project_name, project_version = key  # Unpack the group key
+        if pd.isna(project_version):
+            project_version_str = 'None'
+        else:
+            project_version_str = str(project_version) 
+
+        print(f"Evaluating data for confusion matrix of project: {project_name} - {project_version_str}")
+
+        # Drop all artifacts without version number
+        project_version_group.dropna(subset=['version'], inplace=True)
+
+        # Get all unique artifacts
+        all_artifacts = project_version_group['name_version'].unique()
+
+        # Create an IndexSlice object
+
+        # Initialize an empty list to hold data for the final DataFrame
+        data_final = []
+
+        # Group by 'name' and 'type'
+        scanner_grouped = project_version_group.groupby(['scanner_name'], dropna=False)
+
+        # Iterate through groups
+        for scanner_name, scanner_df in scanner_grouped:
+
+            # Evaluate missing 'name_version'
+            missing_artifacts = set(all_artifacts) - set(scanner['name_version'])
+
+            # Append rows for missing UUIDs
+            data_final.extend(
+                {
+                    'project_name': project_name,
+                    'project_version': project_version,
+                    'scanner_name': scanner_name,
+                    'name_version': artifact,
+                    'flag': 0,
+                }
+                for artifact in missing_artifacts
+            )
+        # Append the original group
+        data_final.extend(scanner_df.to_dict(orient='records'))
+
+
+        # Create the final DataFrame
+        return pd.DataFrame(data_final)
