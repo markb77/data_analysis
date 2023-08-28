@@ -82,7 +82,7 @@ def _create_plot_data(set_values):
                 set_A_and_B_and_D), 
     } 
 
-def _visualize_set_similarities(plot_title, project_name, project_version, set_names, 
+def _visualize_set_similarities(plot_title, project_name, project_version:None, set_names, 
                                 set_values, set_legends, output_file=None):
 
     # Create the figure and subplots
@@ -189,7 +189,8 @@ def _visualize_set_similarities(plot_title, project_name, project_version, set_n
 
     if output_file:
         # Check if output folder exists
-        if project_version:
+        if project_version is None and not math.isnan(a):
+            print("debug: type(project_version)")
             output_folder = f"../output/{project_name}_{project_version}"
         else:
             output_folder = f"../output/{project_name}"
@@ -256,13 +257,12 @@ def create_SBOM_similarity_plot(project_name, project_version:None, scanner_data
     _visualize_set_similarities(plot_title, project_name, project_version, set_names, 
                                 set_values, set_legends, output_file)
     
-def create_SBOM_confusion_matrix(project_name, project_version:None, scanner_data_df, 
+def create_SBOM_confusion_matrix(project_name_version, scanner_data_df, 
                                  output_file=None):
  
-
     scanner_names = scanner_data_df['scanner_name'].unique()
 
-    plot_title = f"Confusion matrix for project {project_name}"
+    plot_title = f"Confusion matrix for project {project_name_version}"
 
     # Create the figure and subplots
     fig, axes = plt.subplots(3, 2, figsize=(10, 12))
@@ -309,10 +309,7 @@ def create_SBOM_confusion_matrix(project_name, project_version:None, scanner_dat
 
     if output_file:
         # Check if output folder exists
-        if project_version:
-            output_folder = f"../output/{project_name}_{project_version}"
-        else:
-            output_folder = f"../output/{project_name}"
+        output_folder = f"../output/{project_name_version}"
         if not os.path.exists(output_folder):
             os.makedirs(output_folder)
     
@@ -322,9 +319,7 @@ def create_SBOM_confusion_matrix(project_name, project_version:None, scanner_dat
 
     # Show the plot
     plt.show()
-
     
-
 def evaluate_confusion_matrix(scanner_data_agg_df):
     columns = ['project_name', 'project_version', 'scanner_name', 'name_version', 'name', 'version']
     project_version_grouped = scanner_data_agg_df[columns].groupby(['project_name', 'project_version'], dropna=False)
