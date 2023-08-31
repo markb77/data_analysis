@@ -2,6 +2,7 @@ import logging
 import os
 import warnings
 
+import numpy as np
 import pandas as pd
 import requests
 from config import SUCCESS_STATUS_CODE
@@ -230,6 +231,12 @@ class DependencyTrack:
         # Code to collect all scanner data for a project
         # Use self.get_project_data and self.get_project_components
 
+        def extract_value(x, key):
+            if isinstance(x, list) and len(x) > 0 and isinstance(x[0], dict):
+                return x[0][key]
+            else:
+                return np.nan
+
         try:
             # get data of all scanners in 'scanner_names' for project 'project_name'
             project_data_df = self._get_project_data(project_name, project_version)
@@ -259,6 +266,10 @@ class DependencyTrack:
                 # Select data and reset index
                 df = data_df[scanner_name]
                 df.reset_index(drop=True, inplace=True)
+
+                # Evaluate hash_algo and hash_sum
+                df['hash_sum'] = df['hashes'].apply(lambda x: extract_value(x, 'content'))
+                df['hash_algo'] = df['hashes'].apply(lambda x: extract_value(x, 'alg'))
 
                 # Apply the parse_url function to each element of the 'purl' column
                 df_parsed = df['purl'].apply(self._parse_purl)

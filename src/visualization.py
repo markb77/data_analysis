@@ -2,6 +2,7 @@ import copy
 import os
 
 import matplotlib.pyplot as plt
+import pandas as pd
 from matplotlib.patches import Patch
 from matplotlib_venn import venn2, venn3
 from sklearn import metrics
@@ -189,14 +190,14 @@ def _visualize_set_similarities(plot_title, project_name, project_version:None, 
 
     if output_file:
         # Check if output folder exists
-        if project_version is None and not math.isnan(a):
-            print("debug: type(project_version)")
+        if not pd.isna(project_version):
+            print(f"debug: {type(project_version)}")
             output_folder = f"../output/{project_name}_{project_version}"
         else:
             output_folder = f"../output/{project_name}"
         if not os.path.exists(output_folder):
             os.makedirs(output_folder)
-    
+
         # Save the plot to a file
         plt.savefig(os.path.join(output_folder, output_file), 
                     dpi=300, bbox_inches='tight')      
